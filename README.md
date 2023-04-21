@@ -4,25 +4,85 @@ PgBouncer is a lightweight connection pooler for PostgreSQL. This chart is forke
 
 ## Usage
 
-Clone this project
+### Clone this project
+
+Clone this repo to a directory, for this example `/app/pgbouncer-template`
 
 ```bash
-~$ git clone git@github.com:landx-id/pgbouncer-chart-gke.git
+~$ git clone git@github.com:8grams/pgbouncer-chart-gke.git /app/pgbouncer-template
 ```
 
-Update `values.yml` to appropriate values any variables inside square brackets `[]`
-1. **[DB_User]** : Database username
-2. **[DB_Password]** : Database password
-3. **[DB_Name]** : Database name
-4. **[GKE_Service_Account]** : Service Account, annotated by Cloud SQL Service Account 
-5. **[GCP_Project_ID]** : GCP Project ID
-6. **[Cloud_SQL_Region]** : Region of Cloud SQL DB Instance
-7. **[DB_Instance]** : DB Instance Name
+### values.yml
 
-Install using Helm
+Create a file named `values.yml` which contains the following configuration. Please adjust to your appropriate values.
+This example assumes we have:
+1. A PostreSQL CloudSQL Instance named: `my-db-instance`, in region `asia-southeast2`
+2. A Database, inside `my-db-instance`, called `my-db`
+3. DB User called `admin` with password `xxx`
+4. Kubernetes Service Account associated with a CloudSQL's service account named `kubesql-ksa`. See `Annotate GKE Service Account` section below for more details.
 
 ```
-~$ helm install pgbouncer . -f values.yaml --namespace <your-namespace>
+config:
+  adminUser: admin
+  adminPassword: xxx
+  databases: 
+    # your database name
+    my-db:
+      host: 127.0.0.1
+      port: 5433
+  pgbouncer: 
+    auth_type: md5
+    pool_mode: transaction
+    max_client_conn: 1024
+    default_pool_size: 15
+    max_db_connections: 15
+    listen_port: 5432
+    ignore_startup_parameters: extra_float_digits
+
+replicaCount: 1
+updateStrategy:
+  type: RollingUpdate
+
+minReadySeconds: 0
+revisionHistoryLimit: 3
+imagePullSecrets: []
+
+image:
+  registry: ""
+  repository: pgbouncer/pgbouncer
+  tag: 1.15.0
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 5432
+
+pgbouncerExporter:
+  enabled: false
+
+# Kubernetes Service Account associated with a CloudSQL's service account
+serviceAccount:
+  name: kubesql-ksa
+  annotations: {}
+  create: false
+
+extraContainers:
+- name: cloud-sql-proxy
+  image: gcr.io/cloudsql-docker/gce-proxy:1.17
+  command:
+    - "/cloud_sql_proxy"
+    - "-ip_address_types=PRIVATE"
+
+    # your GCP project ID, region, and DB Instance's name
+    - "-instances=my-gcp-project:asia-southeast2:my-db-instance=tcp:5433""
+  securityContext:
+    runAsNonRoot: true
+```
+
+### Install using Helm
+
+```
+~$ helm install pgbouncer /app/pgbouncer-template -f values.yaml --namespace <your-namespace>
 ```
 
 
